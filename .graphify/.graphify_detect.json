@@ -1,0 +1,48 @@
+{
+  "files": {
+    "code": [
+      "src/main/java/com/yanki/gateway/ApiGatewayApplication.java",
+      "src/main/java/com/yanki/gateway/domain/model/JwtPrincipal.java",
+      "src/main/java/com/yanki/gateway/infrastructure/config/GatewayCorsConfiguration.java",
+      "src/main/java/com/yanki/gateway/infrastructure/config/GatewayCorsProperties.java",
+      "src/main/java/com/yanki/gateway/infrastructure/config/GatewayPublicPathProperties.java",
+      "src/main/java/com/yanki/gateway/infrastructure/config/GatewaySecurityProperties.java",
+      "src/main/java/com/yanki/gateway/infrastructure/filter/GatewayErrorHandler.java",
+      "src/main/java/com/yanki/gateway/infrastructure/filter/JwtAuthenticationGlobalFilter.java",
+      "src/main/java/com/yanki/gateway/infrastructure/support/ErrorResponseWriter.java",
+      "src/main/java/com/yanki/gateway/interfaces/rest/FallbackController.java",
+      "src/main/java/com/yanki/gateway/interfaces/rest/dto/ApiError.java",
+      "src/test/java/com/yanki/gateway/infrastructure/config/Resilience4jGatewayConfigurationTest.java",
+      "src/test/java/com/yanki/gateway/infrastructure/filter/GatewayErrorHandlerTest.java",
+      "src/test/java/com/yanki/gateway/infrastructure/filter/JwtAuthenticationGlobalFilterTest.java",
+      "src/test/java/com/yanki/gateway/interfaces/rest/GatewayHttpFlowIntegrationTest.java"
+    ],
+    "document": [],
+    "paper": [],
+    "image": [],
+    "video": []
+  },
+  "total_files": 15,
+  "total_words": 4701,
+  "needs_graph": false,
+  "warning": "Corpus is ~4,701 words - fits in a single context window. You may not need a graph.",
+  "skipped_sensitive": [
+    "src/main/java/com/yanki/gateway/infrastructure/config/JwtTokenValidator.java",
+    "src/test/java/com/yanki/gateway/infrastructure/config/JwtTokenValidatorTest.java"
+  ],
+  "graphifyignore_patterns": 52,
+  "scope": {
+    "requested_mode": "auto",
+    "resolved_mode": "all",
+    "source": "default-auto",
+    "root": ".",
+    "candidate_count": null,
+    "included_count": 15,
+    "excluded_untracked_count": 0,
+    "excluded_ignored_count": 0,
+    "excluded_sensitive_count": 2,
+    "missing_committed_count": 0,
+    "warnings": [],
+    "recommendation": null
+  }
+}

@@ -1,0 +1,226 @@
+{
+  "communities": {
+    "0": [
+      "config_gatewaycorsproperties",
+      "config_gatewaycorsproperties_gatewaycorsproperties",
+      "config_gatewaycorsproperties_gatewaycorsproperties_getallowedheaders",
+      "config_gatewaycorsproperties_gatewaycorsproperties_getallowedmethods",
+      "config_gatewaycorsproperties_gatewaycorsproperties_getallowedorigins",
+      "config_gatewaycorsproperties_gatewaycorsproperties_getexposedheaders",
+      "config_gatewaycorsproperties_gatewaycorsproperties_getmaxage",
+      "config_gatewaycorsproperties_gatewaycorsproperties_isallowcredentials",
+      "config_gatewaycorsproperties_gatewaycorsproperties_setallowcredentials",
+      "config_gatewaycorsproperties_gatewaycorsproperties_setallowedheaders",
+      "config_gatewaycorsproperties_gatewaycorsproperties_setallowedmethods",
+      "config_gatewaycorsproperties_gatewaycorsproperties_setallowedorigins",
+      "config_gatewaycorsproperties_gatewaycorsproperties_setexposedheaders",
+      "config_gatewaycorsproperties_gatewaycorsproperties_setmaxage"
+    ],
+    "1": [
+      "config_gatewaysecurityproperties",
+      "config_gatewaysecurityproperties_gatewaysecurityproperties",
+      "config_gatewaysecurityproperties_gatewaysecurityproperties_getexpiration",
+      "config_gatewaysecurityproperties_gatewaysecurityproperties_getissuer",
+      "config_gatewaysecurityproperties_gatewaysecurityproperties_getmaxlifetimegrace",
+      "config_gatewaysecurityproperties_gatewaysecurityproperties_getsecret",
+      "config_gatewaysecurityproperties_gatewaysecurityproperties_setexpiration",
+      "config_gatewaysecurityproperties_gatewaysecurityproperties_setissuer",
+      "config_gatewaysecurityproperties_gatewaysecurityproperties_setmaxlifetimegrace",
+      "config_gatewaysecurityproperties_gatewaysecurityproperties_setsecret"
+    ],
+    "2": [
+      "filter_jwtauthenticationglobalfilter",
+      "filter_jwtauthenticationglobalfilter_jwtauthenticationglobalfilter",
+      "filter_jwtauthenticationglobalfilter_jwtauthenticationglobalfilter_filter",
+      "filter_jwtauthenticationglobalfilter_jwtauthenticationglobalfilter_getorder",
+      "filter_jwtauthenticationglobalfilter_jwtauthenticationglobalfilter_isbearer",
+      "filter_jwtauthenticationglobalfilter_jwtauthenticationglobalfilter_ispublicpath",
+      "filter_jwtauthenticationglobalfilter_jwtauthenticationglobalfilter_unauthorized",
+      "filter_jwtauthenticationglobalfilter_jwtauthenticationglobalfilter_withprincipal",
+      "globalfilter",
+      "ordered"
+    ],
+    "3": [
+      "errorwebexceptionhandler",
+      "filter_gatewayerrorhandler",
+      "filter_gatewayerrorhandler_gatewayerrorhandler",
+      "filter_gatewayerrorhandler_gatewayerrorhandler_handle",
+      "filter_gatewayerrorhandler_gatewayerrorhandler_resolvecode",
+      "filter_gatewayerrorhandler_gatewayerrorhandler_resolvedetails",
+      "filter_gatewayerrorhandler_gatewayerrorhandler_resolvemessage",
+      "filter_gatewayerrorhandler_gatewayerrorhandler_resolvestatus",
+      "filter_gatewayerrorhandler_gatewayerrorhandler_rootcause"
+    ],
+    "4": [
+      "rest_gatewayhttpflowintegrationtest",
+      "rest_gatewayhttpflowintegrationtest_gatewayhttpflowintegrationtest",
+      "rest_gatewayhttpflowintegrationtest_gatewayhttpflowintegrationtest_shouldanswercorspreflight",
+      "rest_gatewayhttpflowintegrationtest_gatewayhttpflowintegrationtest_shouldexposeactuatorwithouttoken",
+      "rest_gatewayhttpflowintegrationtest_gatewayhttpflowintegrationtest_shouldexposefallbackhealthendpoint",
+      "rest_gatewayhttpflowintegrationtest_gatewayhttpflowintegrationtest_shouldexposeopenapiwithouttoken",
+      "rest_gatewayhttpflowintegrationtest_gatewayhttpflowintegrationtest_shouldrejectprotectedroutewithinvalidtoken",
+      "rest_gatewayhttpflowintegrationtest_gatewayhttpflowintegrationtest_shouldrejectprotectedroutewithouttoken",
+      "rest_gatewayhttpflowintegrationtest_gatewayhttpflowintegrationtest_shouldreturnserviceunavailablewhendestinationisdown"
+    ],
+    "5": [
+      "filter_jwtauthenticationglobalfiltertest",
+      "filter_jwtauthenticationglobalfiltertest_jwtauthenticationglobalfiltertest",
+      "filter_jwtauthenticationglobalfiltertest_jwtauthenticationglobalfiltertest_setup",
+      "filter_jwtauthenticationglobalfiltertest_jwtauthenticationglobalfiltertest_shouldallowpublicpathwithouttoken",
+      "filter_jwtauthenticationglobalfiltertest_jwtauthenticationglobalfiltertest_shouldpropagateidentityheaderswhentokenisvalid",
+      "filter_jwtauthenticationglobalfiltertest_jwtauthenticationglobalfiltertest_shouldrejectinvalidtoken",
+      "filter_jwtauthenticationglobalfiltertest_jwtauthenticationglobalfiltertest_shouldrejectprotectedpathwithmalformedauthorizationheader",
+      "filter_jwtauthenticationglobalfiltertest_jwtauthenticationglobalfiltertest_shouldrejectprotectedpathwithouttoken"
+    ],
+    "6": [
+      "support_errorresponsewriter",
+      "support_errorresponsewriter_errorresponsewriter",
+      "support_errorresponsewriter_errorresponsewriter_errorresponsewriter",
+      "support_errorresponsewriter_errorresponsewriter_serialize",
+      "support_errorresponsewriter_errorresponsewriter_write"
+    ],
+    "7": [
+      "config_gatewaycorsconfiguration",
+      "config_gatewaycorsconfiguration_gatewaycorsconfiguration",
+      "config_gatewaycorsconfiguration_gatewaycorsconfiguration_corswebfilter",
+      "config_gatewaycorsconfiguration_gatewaycorsconfiguration_gatewaycorsconfiguration"
+    ],
+    "8": [
+      "config_gatewaypublicpathproperties",
+      "config_gatewaypublicpathproperties_gatewaypublicpathproperties",
+      "config_gatewaypublicpathproperties_gatewaypublicpathproperties_getpublicpaths",
+      "config_gatewaypublicpathproperties_gatewaypublicpathproperties_setpublicpaths"
+    ],
+    "9": [
+      "config_resilience4jgatewayconfigurationtest",
+      "config_resilience4jgatewayconfigurationtest_resilience4jgatewayconfigurationtest",
+      "config_resilience4jgatewayconfigurationtest_resilience4jgatewayconfigurationtest_shouldapplycircuitbreakersettingstodefaultbreaker",
+      "config_resilience4jgatewayconfigurationtest_resilience4jgatewayconfigurationtest_shouldapplytwosecondstimeouttodefaulttimelimiter"
+    ],
+    "10": [
+      "rest_fallbackcontroller",
+      "rest_fallbackcontroller_fallbackcontroller",
+      "rest_fallbackcontroller_fallbackcontroller_fallback",
+      "rest_fallbackcontroller_fallbackcontroller_health"
+    ],
+    "11": [
+      "gateway_apigatewayapplication",
+      "gateway_apigatewayapplication_apigatewayapplication",
+      "gateway_apigatewayapplication_apigatewayapplication_main"
+    ],
+    "12": [
+      "dto_apierror",
+      "dto_apierror_of"
+    ],
+    "13": [
+      "model_jwtprincipal",
+      "model_jwtprincipal_rolesasheadervalue"
+    ]
+  },
+  "cohesion": {
+    "0": 0.14285714285714285,
+    "1": 0.2,
+    "2": 0.3333333333333333,
+    "3": 0.3888888888888889,
+    "4": 0.2222222222222222,
+    "5": 0.25,
+    "6": 0.5,
+    "7": 0.5,
+    "8": 0.5,
+    "9": 0.5,
+    "10": 0.5,
+    "11": 0.6666666666666666,
+    "12": 1,
+    "13": 1
+  },
+  "gods": [
+    {
+      "id": "config_gatewaycorsproperties_gatewaycorsproperties",
+      "label": "GatewayCorsProperties",
+      "edges": 13,
+      "degree": 13
+    },
+    {
+      "id": "config_gatewaysecurityproperties_gatewaysecurityproperties",
+      "label": "GatewaySecurityProperties",
+      "edges": 9,
+      "degree": 9
+    },
+    {
+      "id": "filter_jwtauthenticationglobalfilter_jwtauthenticationglobalfilter",
+      "label": "JwtAuthenticationGlobalFilter",
+      "edges": 9,
+      "degree": 9
+    },
+    {
+      "id": "filter_gatewayerrorhandler_gatewayerrorhandler",
+      "label": "GatewayErrorHandler",
+      "edges": 8,
+      "degree": 8
+    },
+    {
+      "id": "rest_gatewayhttpflowintegrationtest_gatewayhttpflowintegrationtest",
+      "label": "GatewayHttpFlowIntegrationTest",
+      "edges": 8,
+      "degree": 8
+    },
+    {
+      "id": "filter_jwtauthenticationglobalfiltertest_jwtauthenticationglobalfiltertest",
+      "label": "JwtAuthenticationGlobalFilterTest",
+      "edges": 7,
+      "degree": 7
+    },
+    {
+      "id": "support_errorresponsewriter_errorresponsewriter",
+      "label": "ErrorResponseWriter",
+      "edges": 4,
+      "degree": 4
+    },
+    {
+      "id": "config_gatewaycorsconfiguration_gatewaycorsconfiguration",
+      "label": "GatewayCorsConfiguration",
+      "edges": 3,
+      "degree": 3
+    },
+    {
+      "id": "config_gatewaypublicpathproperties_gatewaypublicpathproperties",
+      "label": "GatewayPublicPathProperties",
+      "edges": 3,
+      "degree": 3
+    },
+    {
+      "id": "rest_fallbackcontroller_fallbackcontroller",
+      "label": "FallbackController",
+      "edges": 3,
+      "degree": 3
+    }
+  ],
+  "surprises": [],
+  "questions": [
+    {
+      "type": "low_cohesion",
+      "question": "Should `Community 0` be split into smaller, more focused modules?",
+      "why": "Cohesion score 0.14285714285714285 - nodes in this community are weakly interconnected."
+    }
+  ],
+  "labels": {
+    "0": "Community 0",
+    "1": "Community 1",
+    "2": "Community 2",
+    "3": "Community 3",
+    "4": "Community 4",
+    "5": "Community 5",
+    "6": "Community 6",
+    "7": "Community 7",
+    "8": "Community 8",
+    "9": "Community 9",
+    "10": "Community 10",
+    "11": "Community 11",
+    "12": "Community 12",
+    "13": "Community 13"
+  },
+  "tokens": {
+    "input": 0,
+    "output": 0
+  }
+}

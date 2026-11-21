@@ -1,0 +1,62 @@
+{
+  "c:/Users/semorale/proyectos/yanki-accounts-service/api-gateway/src/main/java/com/yanki/gateway/ApiGatewayApplication.java": {
+    "mtime": 1794189491131.683,
+    "hash": "43e8483bad921770c1c90dc83575cfdb"
+  },
+  "c:/Users/semorale/proyectos/yanki-accounts-service/api-gateway/src/main/java/com/yanki/gateway/domain/model/JwtPrincipal.java": {
+    "mtime": 1793834250987.7434,
+    "hash": "b1bf6fdf3b323d570a414825b9725a64"
+  },
+  "c:/Users/semorale/proyectos/yanki-accounts-service/api-gateway/src/main/java/com/yanki/gateway/infrastructure/config/GatewayCorsConfiguration.java": {
+    "mtime": 1794189522280.0603,
+    "hash": "1cffb4d92b81416dffe87f5f7d6cf1ff"
+  },
+  "c:/Users/semorale/proyectos/yanki-accounts-service/api-gateway/src/main/java/com/yanki/gateway/infrastructure/config/GatewayCorsProperties.java": {
+    "mtime": 1794189538835.806,
+    "hash": "3f8ffbda587b17196e81a50670b600db"
+  },
+  "c:/Users/semorale/proyectos/yanki-accounts-service/api-gateway/src/main/java/com/yanki/gateway/infrastructure/config/GatewayPublicPathProperties.java": {
+    "mtime": 1793836020429.0605,
+    "hash": "92bdc6571c74a287e4298989d2dead97"
+  },
+  "c:/Users/semorale/proyectos/yanki-accounts-service/api-gateway/src/main/java/com/yanki/gateway/infrastructure/config/GatewaySecurityProperties.java": {
+    "mtime": 1794189554263.8083,
+    "hash": "ea5010f098ecca78805cf693f7ba8057"
+  },
+  "c:/Users/semorale/proyectos/yanki-accounts-service/api-gateway/src/main/java/com/yanki/gateway/infrastructure/filter/GatewayErrorHandler.java": {
+    "mtime": 1793835091601.6602,
+    "hash": "577fc24db7bd06890f6edcf621c69f62"
+  },
+  "c:/Users/semorale/proyectos/yanki-accounts-service/api-gateway/src/main/java/com/yanki/gateway/infrastructure/filter/JwtAuthenticationGlobalFilter.java": {
+    "mtime": 1793836769902.7444,
+    "hash": "6bfa32fd9d4ce4e2e8216b51adac1f14"
+  },
+  "c:/Users/semorale/proyectos/yanki-accounts-service/api-gateway/src/main/java/com/yanki/gateway/infrastructure/support/ErrorResponseWriter.java": {
+    "mtime": 1793834621704.2546,
+    "hash": "734abcb2b24af85318a308941e823cb6"
+  },
+  "c:/Users/semorale/proyectos/yanki-accounts-service/api-gateway/src/main/java/com/yanki/gateway/interfaces/rest/FallbackController.java": {
+    "mtime": 1793835178818.7808,
+    "hash": "2e0609e7bb8118c712968639be8d25bc"
+  },
+  "c:/Users/semorale/proyectos/yanki-accounts-service/api-gateway/src/main/java/com/yanki/gateway/interfaces/rest/dto/ApiError.java": {
+    "mtime": 1793834595588.0544,
+    "hash": "a87fa10d8eb00a8cac25dc0dcfa12f53"
+  },
+  "c:/Users/semorale/proyectos/yanki-accounts-service/api-gateway/src/test/java/com/yanki/gateway/infrastructure/config/Resilience4jGatewayConfigurationTest.java": {
+    "mtime": 1793835887897.1643,
+    "hash": "569aabfedf27ddef5b6ab5e0536fbc8c"
+  },
+  "c:/Users/semorale/proyectos/yanki-accounts-service/api-gateway/src/test/java/com/yanki/gateway/infrastructure/filter/JwtAuthenticationGlobalFilterTest.java": {
+    "mtime": 1793836034703.2698,
+    "hash": "1682ba9b2b115b25c178100592748e03"
+  },
+  "c:/Users/semorale/proyectos/yanki-accounts-service/api-gateway/src/test/java/com/yanki/gateway/interfaces/rest/GatewayHttpFlowIntegrationTest.java": {
+    "mtime": 1793836647591.0713,
+    "hash": "86aa49785d9e2930c8c2abc37a813eaa"
+  },
+  "c:/Users/semorale/proyectos/yanki-accounts-service/api-gateway/src/test/java/com/yanki/gateway/infrastructure/filter/GatewayErrorHandlerTest.java": {
+    "mtime": 1794189065163.2595,
+    "hash": "81529393b339af43f89c850defe2a00b"
+  }
+}

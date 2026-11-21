@@ -1,0 +1,202 @@
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+
+spring:
+  application:
+    name: api-gateway
+  config:
+    import: optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888}
+  cloud:
+    config:
+      fail-fast: false
+      uri: ${CONFIG_SERVER_URL:http://config-server:8888}
+    gateway:
+      # El locator de descubrimiento se desactiva: las rutas son explicitas (ver 'routes')
+      # y una auto-ruta /api-gateway/** provocaria un bucle de reenvio hacia si mismo.
+      discovery:
+        locator:
+          enabled: false
+      httpclient:
+        connect-timeout: 5000
+        response-timeout: 10s
+      routes:
+        - id: auth-service-api
+          uri: lb://auth-service
+          predicates:
+            - Path=/api/auth/**
+          filters:
+            - StripPrefix=0
+            - name: CircuitBreaker
+              args:
+                name: default
+                fallbackUri: forward:/fallback/circuit-breaker
+        - id: auth-service-login
+          uri: lb://auth-service
+          predicates:
+            - Path=/auth/**
+          filters:
+            - StripPrefix=0
+            - name: CircuitBreaker
+              args:
+                name: default
+                fallbackUri: forward:/fallback/circuit-breaker
+        - id: customers-service
+          uri: lb://customers-service
+          predicates:
+            - Path=/api/customers/**
+          filters:
+            - StripPrefix=0
+            - name: CircuitBreaker
+              args:
+                name: default
+                fallbackUri: forward:/fallback/circuit-breaker
+        - id: accounts-service
+          uri: lb://accounts-service
+          predicates:
+            - Path=/api/accounts/**
+          filters:
+            - StripPrefix=0
+            - name: CircuitBreaker
+              args:
+                name: default
+                fallbackUri: forward:/fallback/circuit-breaker
+        - id: credits-service
+          uri: lb://credits-service
+          predicates:
+            - Path=/api/credits/**
+          filters:
+            - StripPrefix=0
+            - name: CircuitBreaker
+              args:
+                name: default
+                fallbackUri: forward:/fallback/circuit-breaker
+        - id: cards-service
+          uri: lb://cards-service
+          predicates:
+            - Path=/api/cards/**
+          filters:
+            - StripPrefix=0
+            - name: CircuitBreaker
+              args:
+                name: default
+                fallbackUri: forward:/fallback/circuit-breaker
+        - id: transfers-service
+          uri: lb://transfers-service
+          predicates:
+            - Path=/api/transfers/**
+          filters:
+            - StripPrefix=0
+            - name: CircuitBreaker
+              args:
+                name: default
+                fallbackUri: forward:/fallback/circuit-breaker
+        - id: wallet-service
+          uri: lb://wallet-service
+          predicates:
+            - Path=/api/wallets/**
+          filters:
+            - StripPrefix=0
+            - name: CircuitBreaker
+              args:
+                name: default
+                fallbackUri: forward:/fallback/circuit-breaker
+        - id: reports-service
+          uri: lb://reports-service
+          predicates:
+            - Path=/api/reports/**
+          filters:
+            - StripPrefix=0
+            - name: CircuitBreaker
+              args:
+                name: default
+                fallbackUri: forward:/fallback/circuit-breaker
+    discovery:
+      enabled: true
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 2s
+      repositories:
+        enabled: false
+
+# ---------------------------------------------------------------------------
+# Resilience4j / Spring Cloud Gateway
+#
+# IMPORTANTE: el timeout del circuit breaker reactivo de Spring Cloud Gateway NO se
+# configura en 'spring.cloud.gateway.filter.circuit-breaker.*' (esa familia de
+# propiedades solo admite 'fallbackUri' y 'statusCodes') ni en
+# 'spring.cloud.circuitbreaker.resilience4j.configs.*' (esa property ya no existe
+# en Spring Cloud CircuitBreaker 3.1.x).
+#
+# El timeout efectivo proviene del TimeLimiterRegistry de Resilience4j, que se
+# construye desde 'resilience4j.timelimiter.configs.<nombre>'. Como el filtro
+# CircuitBreaker se declara con 'name: default', el TimeLimiter llamado 'default'
+# (y por extension su 'timeoutDuration') es el que se aplica a todas las rutas.
+# ---------------------------------------------------------------------------
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_URL:http://discovery-service:8761/eureka/}
+  instance:
+    prefer-ip-address: true
+
+resilience4j:
+  timelimiter:
+    configs:
+      default:
+        timeoutDuration: 10s
+        cancelRunningFuture: true
+  circuitbreaker:
+    configs:
+      default:
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+
+yanki:
+  security:
+    jwt:
+      secret: ${JWT_SECRET:yanki-platform-dev-secret-key-change-me-2026}
+      issuer: ${JWT_ISSUER:yanki-platform}
+      expiration: ${JWT_EXPIRATION:1h}
+      max-lifetime-grace: ${JWT_MAX_LIFETIME_GRACE:5m}
+    public-paths:
+      - /api/auth/**
+      - /auth/**
+      - /actuator/**
+      - /v3/api-docs/**
+      - /swagger-ui/**
+      - /swagger-ui.html
+      - /fallback/**
+  gateway:
+    cors:
+      allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:4200}
+      allowed-methods: ${CORS_ALLOWED_METHODS:GET,POST,PUT,PATCH,DELETE,OPTIONS}
+      allowed-headers: ${CORS_ALLOWED_HEADERS:*}
+      exposed-headers: ${CORS_EXPOSED_HEADERS:}
+      allow-credentials: ${CORS_ALLOW_CREDENTIALS:false}
+      max-age: ${CORS_MAX_AGE:1h}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,gateway,metrics
+  endpoint:
+    health:
+      show-details: always
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
+logging:
+  level:
+    com.yanki: INFO
+    org.springframework.cloud.gateway: INFO
