@@ -87,7 +87,7 @@ Cuando te solicite diseñar un endpoint o validar una estructura de API, evalúa
 - **Spring Data Redis Reactive**: Rate limiting, cache, TTL configurables
 - **Spring Kafka**: (Opcional, para audit/logging events)
 - **JJWT 0.12.6**: JWT HS256 validación local (clave compartida con auth-service)
-- **Resilience4j 2.2.0**: CircuitBreaker (timeout 2s), TimeLimiter, Retry, Bulkhead
+- **Resilience4j 2.2.0**: CircuitBreaker (TimeLimiter 10s, 30% failure rate), Retry
 - **springdoc-openapi 2.6.0**: OpenAPI 3 agregado (merged specs de todos los servicios)
 - **Checkstyle 10.21.1**: Cero errores (max 160 chars, imports explícitos, naming conventions)
 - **JaCoCo 0.8.12**: Cobertura de código
@@ -109,13 +109,14 @@ Cuando te solicite diseñar un endpoint o validar una estructura de API, evalúa
 ## Role & Responsibilities
 **Puerta de entrada única** (Single Entry Point) para todo el tráfico externo:
 
-1. **Routing**: `lb://<service-name>` via Eureka (Spring Cloud Gateway)
-2. **Autenticación**: Validación JWT HS256 (delegada a auth-service o local con clave compartida)
-3. **Circuit Breaker**: Resilience4j (timeout 2s, fallback unificado)
-4. **CORS**: Configuración centralizada
-5. **Rate Limiting**: Redis-based (configurado pero no implementado - issue conocido)
-6. **Headers**: Propagación `X-Request-ID`, `X-User-Roles`, `X-User-CustomerId`
-7. **Fallback**: Respuesta unificada `ApiError` ante fallos downstream
+1. **Routing**: `lb://<service-name>` via Eureka (Spring Cloud Gateway) con `StripPrefix=0`
+2. **Autenticación**: Validación JWT HS256 local (clave compartida con auth-service) + blacklist Redis
+3. **Token Blacklist**: Consulta Redis (`yanki:auth:blacklist:<token>`) con patrón fail-open
+4. **Circuit Breaker**: Resilience4j (TimeLimiter 10s, CB 30% failure rate, fallback unificado)
+5. **CORS**: Configuración centralizada y externalizada (`yanki.gateway.cors.*`)
+6. **Headers**: Propagación `X-User-Id`, `X-Username`, `X-Customer-Id`, `X-Roles`
+7. **Error Handling**: `GatewayErrorHandler` unificado → `ApiError` JSON estandarizado
+8. **Fallback**: `FallbackController` (`/fallback/**`) responde 503 ante fallos downstream
 
 ---
 
@@ -125,9 +126,11 @@ Cuando te solicite diseñar un endpoint o validar una estructura de API, evalúa
 | **Language** | Java 17, Spring Boot 3.3.5, Spring Cloud 2023.0.3 |
 | **Gateway** | Spring Cloud Gateway (Reactivo, Netty) |
 | **Discovery** | Spring Cloud Netflix Eureka Client |
-| **Auth** | JJWT 0.12.6 (validación local JWT HS256) |
-| **Resilience** | Resilience4j 2.2.0 (CircuitBreaker, TimeLimiter, Retry) |
-| **Cache** | Spring Data Redis Reactive (rate limiting - configurado) |
+| **Auth** | JJWT 0.12.6 (validación local JWT HS256 + blacklist Redis) |
+| **Resilience** | Resilience4j 2.2.0 (CircuitBreaker, TimeLimiter) |
+| **Cache** | Spring Data Redis Reactive (token blacklist, fail-open) |
+| **Error Handling** | GatewayErrorHandler + ErrorResponseWriter + FallbackController |
+| **CORS** | CorsWebFilter reactivo (yanki.gateway.cors.*) |
 | **API Docs** | springdoc-openapi 2.6.0 (agregado de todos los servicios) |
 | **Quality** | Checkstyle, JaCoCo |
 
@@ -144,36 +147,111 @@ server:
 spring:
   application:
     name: api-gateway
+  config:
+    import: optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888}
   cloud:
     gateway:
+      discovery:
+        locator:
+          enabled: false
+      httpclient:
+        connect-timeout: 5000
+        response-timeout: 10s
       routes:
+        - id: auth-service-api
+          uri: lb://auth-service
+          predicates:
+            - Path=/api/auth/**
+          filters:
+            - StripPrefix=0
+            - name: CircuitBreaker
+              args:
+                name: default
+                fallbackUri: forward:/fallback/circuit-breaker
+        - id: auth-service-login
+          uri: lb://auth-service
+          predicates:
+            - Path=/auth/**
+          filters:
+            - StripPrefix=0
+            - name: CircuitBreaker
+              args:
+                name: default
+                fallbackUri: forward:/fallback/circuit-breaker
         - id: customers-service
           uri: lb://customers-service
           predicates:
             - Path=/api/customers/**
-        - id: auth-service
-          uri: lb://auth-service
-          predicates:
-            - Path=/api/auth/**, /api/credentials/**
           filters:
-            - RemoveRequestHeader=Authorization
+            - StripPrefix=0
+            - name: CircuitBreaker
+              args:
+                name: default
+                fallbackUri: forward:/fallback/circuit-breaker
 eureka:
   client:
     service-url:
-      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
+      defaultZone: ${EUREKA_URL:http://discovery-service:8761/eureka/}
+  instance:
+    prefer-ip-address: true
 
-jwt:
-  secret: ${JWT_SECRET}
-  issuer: ${JWT_ISSUER:yanki-platform}
+resilience4j:
+  timelimiter:
+    configs:
+      default:
+        timeoutDuration: 10s
+        cancelRunningFuture: true
+  circuitbreaker:
+    configs:
+      default:
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        failureRateThreshold: 30
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+
+yanki:
+  security:
+    jwt:
+      secret: ${JWT_SECRET:}
+      issuer: ${JWT_ISSUER:yanki-platform}
+      expiration: ${JWT_EXPIRATION:1h}
+      max-lifetime-grace: ${JWT_MAX_LIFETIME_GRACE:5m}
+    public-paths:
+      - /api/auth/**
+      - /auth/**
+      - /actuator/**
+      - /v3/api-docs/**
+      - /swagger-ui/**
+      - /swagger-ui.html
+      - /fallback/**
+  gateway:
+    cors:
+      allowed-origins: ${CORS_ALLOWED_ORIGINS:}
+      allowed-methods: ${CORS_ALLOWED_METHODS:GET,POST,PUT,PATCH,DELETE,OPTIONS}
+      allowed-headers: ${CORS_ALLOWED_HEADERS:Authorization,Content-Type,Accept,X-Request-ID,X-Correlation-ID}
+      allow-credentials: ${CORS_ALLOW_CREDENTIALS:false}
+      max-age: ${CORS_MAX_AGE:1h}
+
+spring:
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 2s
 ```
 
 ### Requisitos críticos para que un agente lo implemente correctamente
 
 1. `JWT_SECRET` y `JWT_ISSUER` deben ser idénticos a los de `auth-service`.
 2. Las rutas `lb://` dependen de servicios registrados en Eureka con el mismo `spring.application.name`.
-3. El gateway no persiste datos; cualquier estado temporal de rate limiting debe residir en Redis.
+3. El gateway no persiste datos; la blacklist de tokens reside en Redis (clave `yanki:auth:blacklist:<token>`).
 4. Las excepciones de autenticación deben devolver `ApiError` uniforme sin filtrar detalles internos.
-5. Las rutas públicas mínimas son `/api/auth/**`, `/api/credentials/**` y `/actuator/**`.
+5. Las rutas públicas mínimas son `/api/auth/**`, `/auth/**`, `/actuator/**` y `/fallback/**`.
+6. El timeout del TimeLimiter es 10s (no 2s); el failure rate del CB es 30% (no 50%).
+7. Las propiedades JWT usan el prefijo `yanki.security.jwt.*` (no `jwt.*`).
 
 
 ### REST (Inbound - Todos los clientes)
@@ -185,11 +263,22 @@ jwt:
 | `GET` | `/v3/api-docs` | Spec OpenAPI agregada |
 
 ### Routing Rules (application.yml)
+
+Cada ruta aplica `StripPrefix=0` y `CircuitBreaker` con `name: default` y `fallbackUri: forward:/fallback/circuit-breaker`.
+
 ```yaml
 spring:
   cloud:
     gateway:
       routes:
+        - id: auth-service-api
+          uri: lb://auth-service
+          predicates:
+            - Path=/api/auth/**
+        - id: auth-service-login
+          uri: lb://auth-service
+          predicates:
+            - Path=/auth/**
         - id: customers-service
           uri: lb://customers-service
           predicates:
@@ -218,43 +307,58 @@ spring:
           uri: lb://reports-service
           predicates:
             - Path=/api/reports/**
-        - id: auth-service
-          uri: lb://auth-service
-          predicates:
-            - Path=/api/auth/**
-          filters:
-            - RemoveRequestHeader=Authorization  # Login no requiere token
 ```
+
+> **Nota:** Las rutas de auth-service (`/api/auth/**` y `/auth/**`) son públicas (no requieren JWT).
+> El filtro `RemoveRequestHeader=Authorization` **no se aplica** en el gateway; la autenticación
+> se gestiona mediante la lista de rutas públicas en `yanki.security.public-paths`.
 
 ### Filters (Global)
 | Filter | Purpose |
 |--------|---------|
-| `JwtAuthenticationGlobalFilter` | Validar JWT en header `Authorization: Bearer <token>` |
-| `CircuitBreakerFilter` | Resilience4j CB por ruta (timeout 2s) |
-| `CorsGlobalFilter` | CORS configurado |
-| `RequestIdFilter` | Generar/propagar `X-Request-ID` |
-| `UserContextFilter` | Extraer claims JWT → headers `X-User-*` |
+| `JwtAuthenticationGlobalFilter` | Validar JWT HS256 + blacklist Redis; propagar `X-User-Id`, `X-Username`, `X-Customer-Id`, `X-Roles` |
+| `GatewayErrorHandler` | `ErrorWebExceptionHandler` (@Order -2): traduce excepciones a `ApiError` JSON |
+| `CorsWebFilter` | CORS reactivo configurado vía `yanki.gateway.cors.*` |
+
+### Filtros por ruta (application.yml)
+| Filter | Purpose |
+|--------|---------|
+| `StripPrefix=0` | Mantiene el path original al enrutar |
+| `CircuitBreaker` | Resilience4j CB por ruta (TimeLimiter 10s, fallback `/fallback/**`) |
 
 ### JWT Validation (Local en Gateway)
 - **Algorithm**: HS256
-- **Secret**: `JWT_SECRET` (compartido con auth-service)
-- **Issuer**: `JWT_ISSUER` (debe coincidir con auth-service)
-- **Claims verificados**: `exp`, `iss`, `sub`, `roles`, `customerId`, `username`
-- **Excepciones**: `/api/auth/login`, `/api/auth/refresh`, `/actuator/**` → sin validación
+- **Secret**: `yanki.security.jwt.secret` (compartido con auth-service; mínimo 32 bytes)
+- **Issuer**: `yanki.security.jwt.issuer` (debe coincidir con auth-service)
+- **Expiration**: `yanki.security.jwt.expiration` (default: 1h)
+- **Max Lifetime Grace**: `yanki.security.jwt.max-lifetime-grace` (default: 5m)
+- **Claims verificados**: `exp`, `iss`, `sub`, `roles`/`authorities`/`scope`, `customerId`, `username`/`preferred_username`
+- **Blacklist**: `TokenBlacklistService` consulta Redis (`yanki:auth:blacklist:<token>`) con fail-open
+- **Rutas públicas**: configuradas en `yanki.security.public-paths` (sin validación JWT)
+
+### Resolución de claims
+| Claim | Prioridad |
+|---|---|
+| userId | `sub` → `userId` → `""` |
+| username | `username` → `preferred_username` → `userId` |
+| customerId | `customerId` → `""` |
+| roles | `roles` → `authorities` → `scope` |
 
 ### Ejemplo de token esperado en pruebas
 ```json
 {
   "sub": "testuser",
+  "username": "testuser",
   "roles": ["USER"],
   "customerId": "CUSTID01",
-  "username": "testuser",
   "iss": "yanki-platform",
+  "iat": 1769996400,
   "exp": 1769999999
 }
 ```
 
 > Debe firmarse con HS256 usando exactamente el mismo `JWT_SECRET` configurado en `auth-service`.
+> La vida del token (`exp - iat`) no debe superar `expiration + max-lifetime-grace`.
 
 ---
 
@@ -279,16 +383,19 @@ ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75.0", "-jar", "app.jar"]
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `SERVER_PORT` | `8080` | Puerto HTTP |
-| `REDIS_HOST` | `redis` | Host Redis (rate limiting) |
+| `REDIS_HOST` | `localhost` | Host Redis (token blacklist) |
 | `REDIS_PORT` | `6379` | Puerto Redis |
-| `KAFKA_BOOTSTRAP_SERVERS` | `kafka:29092` | Brokers Kafka (no usado directamente) |
-| `EUREKA_URL` | `http://discovery-service:8761/eureka/` | Service discovery |
-| `CONFIG_SERVER_URL` | `http://config-server:8888` | Config Server |
-| `JWT_SECRET` | **REQUIRED** | Clave HS256 - **IDÉNTICA A AUTH-SERVICE** |
+| `EUREKA_URL` | `http://discovery-service:8761/eureka/` | Service discovery (Eureka) |
+| `CONFIG_SERVER_URL` | `http://localhost:8888` | Config Server (Spring Cloud Config) |
+| `JWT_SECRET` | **REQUIRED** | Clave HS256 (min 32 bytes) - **IDÉNTICA A AUTH-SERVICE** |
 | `JWT_ISSUER` | `yanki-platform` | Issuer esperado - **DEBE COINCIDIR CON AUTH-SERVICE** |
-| `YANKI_GATEWAY_CB_TIMEOUT_MS` | `2000` | Circuit breaker timeout (2s) |
-| `YANKI_GATEWAY_RATE_LIMIT_REQ` | `100` | Requests por ventana |
-| `YANKI_GATEWAY_RATE_LIMIT_WINDOW` | `1m` | Ventana rate limit |
+| `JWT_EXPIRATION` | `1h` | Expiración máxima del token |
+| `JWT_MAX_LIFETIME_GRACE` | `5m` | Tolerancia de desfase de reloj |
+| `CORS_ALLOWED_ORIGINS` | (vacío) | Orígenes CORS permitidos |
+| `CORS_ALLOWED_METHODS` | `GET,POST,PUT,PATCH,DELETE,OPTIONS` | Métodos CORS permitidos |
+| `CORS_ALLOWED_HEADERS` | `Authorization,Content-Type,Accept,X-Request-ID,X-Correlation-ID` | Headers CORS |
+| `CORS_ALLOW_CREDENTIALS` | `false` | Credenciales cross-origin |
+| `CORS_MAX_AGE` | `1h` | Cache de preflight CORS |
 
 ### Health Checks
 ```yaml
@@ -345,40 +452,51 @@ mvn clean verify
 ---
 
 ## Security
-- **JWT Validation**: Local (rápido, sin llamada a auth-service)
-- **Secret/Issuer Sync**: **CRÍTICO** - Deben ser idénticos en gateway y auth-service
-- **Rate Limiting**: Configurado en Redis (Token Bucket) - **NO IMPLEMENTADO** (issue conocido)
-- **CORS**: Permitir origenes configurados, credentials true
-- **Headers Seguros**: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`
+- **JWT Validation**: Local (rápido, sin llamada a auth-service) con blacklist Redis
+- **Secret/Issuer Sync**: **CRÍTICO** - `yanki.security.jwt.secret` y `yanki.security.jwt.issuer` deben ser idénticos en gateway y auth-service
+- **Token Blacklist**: Redis (`yanki:auth:blacklist:<token>`) con patrón fail-open
+- **CORS**: Configurado vía `yanki.gateway.cors.*` (externalizado)
+- **Headers de identidad**: Se eliminan headers entrantes `X-User-*` para evitar suplantación
+- **Min secret length**: 32 bytes para HS256 (validado en startup)
 
 ---
 
 ## Error Handling (Fallback Unificado)
-```java
-// GlobalFallbackController
-@ExceptionHandler(Exception.class)
-public Mono<ResponseEntity<ApiError>> handleFallback(ServerWebExchange exchange, Throwable ex) {
-    // Circuit breaker abierto, timeout, 5xx downstream
-    return Mono.just(ResponseEntity
-        .status(HttpStatus.SERVICE_UNAVAILABLE)
-        .body(ApiError.builder()
-            .timestamp(Instant.now())
-            .status(503)
-            .error("Service Unavailable")
-            .code("GATEWAY_FALLBACK")
-            .message("Servicio temporalmente no disponible")
-            .path(exchange.getRequest().getPath().value())
-            .build()));
+
+La gateway centraliza el manejo de errores en tres componentes:
+
+| Componente | Rol |
+|---|---|
+| `GatewayErrorHandler` | `ErrorWebExceptionHandler` (@Order -2): traduce excepciones a `ApiError` JSON |
+| `ErrorResponseWriter` | Serializa `ApiError` a JSON (compartido por filter y errorHandler) |
+| `FallbackController` | `/fallback/**`: responde 503 cuando el circuit breaker abre |
+
+### Códigos de Error
+
+| Scenario | Response | Code | Componente |
+|----------|----------|------|---|
+| Token ausente o mal formado | 401 | `MISSING_TOKEN` | `JwtAuthenticationGlobalFilter` |
+| Token inválido, expirado o revocado | 401 | `INVALID_TOKEN` | `JwtAuthenticationGlobalFilter` |
+| Servicio no disponible (Eureka, conexión) | 503 | `SERVICE_UNAVAILABLE` | `GatewayErrorHandler` / `FallbackController` |
+| Downstream timeout (10s) | 504 | `GATEWAY_TIMEOUT` | `GatewayErrorHandler` |
+| Circuit breaker abierto | 503 | `SERVICE_UNAVAILABLE` | `GatewayErrorHandler` |
+| Error interno no controlado | 500 | `INTERNAL_ERROR` | `GatewayErrorHandler` |
+| Método HTTP no permitido | 405 | `METHOD_NOT_ALLOWED` | `GatewayErrorHandler` |
+| Recurso no encontrado | 404 | `NOT_FOUND` | `GatewayErrorHandler` |
+
+### Formato de Error (`ApiError`)
+
+```json
+{
+  "timestamp": "2026-11-22T13:00:00Z",
+  "status": 401,
+  "error": "Unauthorized",
+  "code": "INVALID_TOKEN",
+  "message": "El token JWT es invalido, ha expirado, no cumple la politica de seguridad o ha sido revocado",
+  "path": "/api/accounts/123",
+  "details": ["InvalidTokenException: Firma o claims invalidos: ..."]
 }
 ```
-
-| Scenario | Response | Code |
-|----------|----------|------|
-| Downstream timeout (2s) | 503 | `GATEWAY_TIMEOUT` |
-| Circuit breaker open | 503 | `GATEWAY_CB_OPEN` |
-| Service not found (Eureka) | 503 | `GATEWAY_NO_INSTANCES` |
-| JWT invalid/expired | 401 | `INVALID_TOKEN` / `TOKEN_EXPIRED` |
-| Rate limit exceeded | 429 | `RATE_LIMIT_EXCEEDED` |
 
 ---
 
@@ -393,17 +511,21 @@ public Mono<ResponseEntity<ApiError>> handleFallback(ServerWebExchange exchange,
 2. Levantar al menos un backend mock o real registrado en Eureka.
 3. Configurar `JWT_SECRET` y `JWT_ISSUER` con los mismos valores que `auth-service`.
 4. Ejecutar `mvn clean verify`.
-5. Probar request protegido con token válido.
-6. Probar request con token inválido/expirado.
-7. Probar caída del downstream para verificar fallback `503`.
-8. Si se implementa rate limiting, probar ráfaga de requests para verificar `429`.
+5. Probar request protegido con token válido → verificar headers `X-User-Id`, `X-Username`, `X-Customer-Id`, `X-Roles`.
+6. Probar request con token inválido/expirado → verificar `401 INVALID_TOKEN`.
+7. Probar token revocado (en blacklist de Redis) → verificar `401 INVALID_TOKEN`.
+8. Probar caída del downstream → verificar fallback `503 SERVICE_UNAVAILABLE`.
+9. Probar ruta pública (`/api/auth/**`, `/actuator/**`) → verificar que no exige JWT.
+10. Si se implementa rate limiting, probar ráfaga de requests para verificar `429`.
 
 ### Criterios de aceptación verificables
-- Request autenticado se enruta al servicio correcto.
-- Claims JWT se propagan como headers `X-User-*`.
-- Token inválido devuelve `401`.
-- Timeout o caída downstream devuelve `503` con `ApiError`.
+- Request autenticado se enruta al servicio correcto vía `lb://`.
+- Claims JWT se propagan como headers `X-User-Id`, `X-Username`, `X-Customer-Id`, `X-Roles`.
+- Token inválido devuelve `401` con código `INVALID_TOKEN`.
+- Token revocado (en blacklist) devuelve `401` con código `INVALID_TOKEN`.
+- Timeout o caída downstream devuelve `503` con `ApiError` y código `SERVICE_UNAVAILABLE`.
 - `/actuator/health` responde sin JWT.
+- Redis caído no bloquea el acceso (fail-open).
 
 ---
 
@@ -461,6 +583,7 @@ redis-cli -h localhost -p 6379 KEYS "yanki:gateway:ratelimit:*"
 
 ## Known Issues
 1. **JWT_ISSUER mismatch**: Gateway default `yanki-platform` vs Auth `yanki-auth-service` → tokens rechazados
+   - **Solución**: Asegurar que `JWT_ISSUER` sea idéntico en ambos servicios
 2. **Rate Limiting**: Redis configurado pero `RequestRateLimiterGatewayFilterFactory` no implementado
    - **Workaround técnico documentado**:
      ```yaml
@@ -473,6 +596,9 @@ redis-cli -h localhost -p 6379 KEYS "yanki:gateway:ratelimit:*"
      ```
    - Requiere Redis operativo y filtro enlazado a las rutas protegidas.
 3. **OpenAPI Aggregation**: `springdoc` agrega specs pero requiere servicios arriba para discover
+4. **Token Blacklist - Redis dependency**: Si Redis cae, los tokens revocados no se detectan (fail-open)
+   - **Impacto**: Un token revocado por logout puede seguir funcionando hasta su expiración natural
+   - **Mitigación**: Monitorear la salud de Redis; considerar TTL corto en tokens
 
 ---
 

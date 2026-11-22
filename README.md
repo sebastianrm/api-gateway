@@ -9,7 +9,7 @@ Cualquier petición externa —desde la aplicación móvil, la web o una API ext
 - **Puerto:** `8080`
 - **Base de datos:** No tiene BD propia (solo enruta)
 - **Cache:** Redis (lista negra de tokens revocados)
-- **Stack:** Java 17, Spring Boot 3.3.5, Spring Cloud Gateway, Resilience4j, JJWT, Redis
+- **Stack:** Java 17, Spring Boot 3.3.5, Spring Cloud Gateway, Resilience4j, JJWT, Redis Reactive
 
 ---
 
@@ -17,13 +17,14 @@ Cualquier petición externa —desde la aplicación móvil, la web o una API ext
 
 | Responsabilidad | Qué significa en la práctica |
 |---|---|
-| **Enrutamiento** | Recibe `/api/customers/123` y lo envía a `customers-service` |
-| **Autenticación JWT** | Verifica que el token Bearer sea válido antes de dejar pasar la petición |
-| **Token Blacklist** | Consulta Redis para rechazar tokens que fueron revocados por un logout |
-| **Circuit Breaker** | Si un servicio cae, devuelve un error amigable en vez de colgar |
-| **CORS** | Permite que la app web (frontend) haga peticiones al gateway |
-| **Headers de identidad** | Extrae `X-User-Id`, `X-Username` y `X-Roles` del JWT y los propaga |
-| **Fallback unificado** | Respuesta `ApiError` estandarizada cuando un servicio no responde |
+| **Enrutamiento** | Recibe `/api/customers/123` y lo envía a `customers-service` vía `lb://` (Eureka) |
+| **Autenticación JWT** | Valida firma HS256, issuer, expiración y vida máxima del token |
+| **Token Blacklist** | Consulta Redis para rechazar tokens revocados por logout (patrón fail-open) |
+| **Circuit Breaker** | Resilience4j: si un servicio cae, responde 503 con `ApiError` estandarizado |
+| **CORS** | Configuración centralizada y externalizada (`yanki.gateway.cors.*`) |
+| **Headers de identidad** | Propaga `X-User-Id`, `X-Username`, `X-Customer-Id` y `X-Roles` al downstream |
+| **Error Handling** | `GatewayErrorHandler` unificado: traduce excepciones a `ApiError` JSON |
+| **Fallback** | `FallbackController` responde 503 cuando el circuit breaker abre |
 
 ---
 
@@ -180,20 +181,44 @@ Cuando un microservicio cae o tarda demasiado, el circuit breaker protege al gat
 
 | Parámetro | Valor | Qué significa |
 |---|---|---|
-| **Timeout** | 10 segundos | Si un servicio no responde en 10s, se corta |
-| **Sliding Window** | 10 llamadas | Ventana de evaluación |
-| **Failure Rate** | 50% | Si 5 de 10 llamadas fallan, se abre el circuito |
-| **Wait Duration** | 10 segundos | Tiempo antes de intentar de nuevo |
+| **Timeout** | 10 segundos | TimeLimiter: si un servicio no responde en 10s, se corta |
+| **Sliding Window** | 10 llamadas (COUNT_BASED) | Ventana de evaluación |
+| **Minimum Calls** | 5 | Llamadas mínimas antes de evaluar el circuito |
+| **Failure Rate** | 30% | Si 3 de 10 llamadas fallan, se abre el circuito |
+| **Wait Duration** | 10 segundos | Tiempo en estado abierto antes de probar de nuevo |
 | **Half-Open Calls** | 3 | Intentos de prueba antes de cerrar el circuito |
 
 ```mermaid
 stateDiagram-v2
     [*] --> Cerrado
-    Cerrado --> Abierto: 50% de fallos en 10 llamadas
+    Cerrado --> Abierto: 30% de fallos en 10 llamadas (min 5)
     Abierto --> MedioAbierto: Esperar 10 segundos
     MedioAbierto --> Cerrado: 3 llamadas exitosas
     MedioAbierto --> Abierto: 1 fallo en las pruebas
 ```
+
+### Configuración en `application.yml`
+
+```yaml
+resilience4j:
+  timelimiter:
+    configs:
+      default:
+        timeoutDuration: 10s
+        cancelRunningFuture: true
+  circuitbreaker:
+    configs:
+      default:
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        failureRateThreshold: 30
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+```
+
+Cada ruta del gateway aplica el filtro `CircuitBreaker` con `name: default` y `fallbackUri: forward:/fallback/circuit-breaker`.
 
 ---
 
@@ -203,11 +228,21 @@ Cuando un token es válido, el gateway extrae la información del JWT y la agreg
 
 | Header | Origen | Ejemplo |
 |---|---|---|
-| `X-User-Id` | Claim `userId` del JWT | `CUST-001` |
-| `X-Username` | Claim `sub` del JWT | `operador@yanki.com` |
-| `X-Roles` | Claim `roles` del JWT | `ROLE_OPERATOR,ROLE_ADMIN` |
+| `X-User-Id` | Claim `sub` (o `userId`) del JWT | `CUST-001` |
+| `X-Username` | Claim `username` (o `preferred_username`) del JWT | `operador@yanki.com` |
+| `X-Customer-Id` | Claim `customerId` del JWT | `CUSTID01` |
+| `X-Roles` | Claim `roles` (o `authorities`/`scope`) del JWT | `ROLE_OPERATOR,ROLE_ADMIN` |
 
 **Nota de seguridad:** Los headers entrantes con estos nombres se **eliminan** antes de propagar, para evitar que un cliente malicioso los suplante.
+
+### Resolución de claims
+
+El validador resuelve los claims con la siguiente prioridad:
+
+- **userId**: `sub` → `userId` → `""`
+- **username**: `username` → `preferred_username` → `userId`
+- **customerId**: `customerId` → `""`
+- **roles**: `roles` → `authorities` → `scope` (separador: `,` para roles/authorities, ` ` para scope)
 
 ---
 
@@ -218,22 +253,32 @@ Cuando un token es válido, el gateway extrae la información del JWT y la agreg
 | Variable | Default | Descripción |
 |---|---|---|
 | `SERVER_PORT` | `8080` | Puerto HTTP |
-| `EUREKA_URL` | `http://discovery-service:8761/eureka/` | Service Discovery |
-| `CONFIG_SERVER_URL` | `http://localhost:8888` | Config Server |
-| `JWT_SECRET` | **REQUERIDO** | Clave HS256 (mínimo 32 caracteres) — **debe coincidir con auth-service** |
+| `EUREKA_URL` | `http://discovery-service:8761/eureka/` | Service Discovery (Eureka) |
+| `CONFIG_SERVER_URL` | `http://localhost:8888` | Config Server (Spring Cloud Config) |
+| `JWT_SECRET` | **REQUERIDO** | Clave HS256 (mínimo 32 bytes) — **debe coincidir con auth-service** |
 | `JWT_ISSUER` | `yanki-platform` | Emisor del token — **debe coincidir con auth-service** |
 | `JWT_EXPIRATION` | `1h` | Expiración máxima del token |
 | `JWT_MAX_LIFETIME_GRACE` | `5m` | Tolerancia de desfase de reloj |
 | `REDIS_HOST` | `localhost` | Host Redis (token blacklist) |
 | `REDIS_PORT` | `6379` | Puerto Redis |
+| `CORS_ALLOWED_ORIGINS` | (vacío) | Orígenes CORS permitidos |
+| `CORS_ALLOWED_METHODS` | `GET,POST,PUT,PATCH,DELETE,OPTIONS` | Métodos CORS permitidos |
+| `CORS_ALLOWED_HEADERS` | `Authorization,Content-Type,Accept,X-Request-ID,X-Correlation-ID` | Headers CORS permitidos |
+| `CORS_ALLOW_CREDENTIALS` | `false` | Permitir credenciales cross-origin |
+| `CORS_MAX_AGE` | `1h` | Cache de preflight CORS |
 
-### 7.2 Rutas Públicas
+### 7.2 Propiedades del Gateway
 
-Las siguientes rutas **no requieren** autenticación JWT:
+Las propiedades se externalizan con el prefijo `yanki.security`:
 
 ```yaml
 yanki:
   security:
+    jwt:
+      secret: ${JWT_SECRET:}
+      issuer: ${JWT_ISSUER:yanki-platform}
+      expiration: ${JWT_EXPIRATION:1h}
+      max-lifetime-grace: ${JWT_MAX_LIFETIME_GRACE:5m}
     public-paths:
       - /api/auth/**
       - /auth/**
@@ -242,7 +287,29 @@ yanki:
       - /swagger-ui/**
       - /swagger-ui.html
       - /fallback/**
+  gateway:
+    cors:
+      allowed-origins: ${CORS_ALLOWED_ORIGINS:}
+      allowed-methods: ${CORS_ALLOWED_METHODS:GET,POST,PUT,PATCH,DELETE,OPTIONS}
+      allowed-headers: ${CORS_ALLOWED_HEADERS:Authorization,Content-Type,Accept,X-Request-ID,X-Correlation-ID}
+      exposed-headers: ${CORS_EXPOSED_HEADERS:}
+      allow-credentials: ${CORS_ALLOW_CREDENTIALS:false}
+      max-age: ${CORS_MAX_AGE:1h}
 ```
+
+### 7.3 Rutas Públicas
+
+Las siguientes rutas **no requieren** autenticación JWT:
+
+| Ruta | Descripción |
+|---|---|
+| `/api/auth/**` | Endpoints de autenticación (login, refresh) |
+| `/auth/**` | Endpoints de autenticación directos |
+| `/actuator/**` | Health, metrics, info, gateway routes |
+| `/v3/api-docs/**` | OpenAPI spec agregado |
+| `/swagger-ui/**` | Swagger UI |
+| `/swagger-ui.html` | Swagger UI entry point |
+| `/fallback/**` | Endpoints de fallback del circuit breaker |
 
 ---
 
@@ -290,72 +357,118 @@ src/main/java/com/yanki/gateway
 ├── ApiGatewayApplication.java
 ├── domain
 │   └── model
-│       └── JwtPrincipal.java              # Identidad extraída del JWT
+│       └── JwtPrincipal.java              # Record: identidad extraída del JWT
 ├── infrastructure
 │   ├── cache
-│   │   └── TokenBlacklistService.java     # Consulta Redis para tokens revocados
+│   │   └── TokenBlacklistService.java     # Consulta Redis (fail-open) para tokens revocados
 │   ├── config
-│   │   ├── GatewayCorsConfiguration.java  # Configuración CORS
-│   │   ├── GatewayCorsProperties.java     # Propiedades CORS
-│   │   ├── GatewayPublicPathProperties.java # Rutas públicas
-│   │   ├── GatewaySecurityProperties.java # Propiedades JWT
-│   │   └── JwtTokenValidator.java         # Valida firma + blacklist
+│   │   ├── GatewayCorsConfiguration.java  # CorsWebFilter reactivo
+│   │   ├── GatewayCorsProperties.java     # Propiedades CORS (yanki.gateway.cors.*)
+│   │   ├── GatewayPublicPathProperties.java # Rutas públicas (yanki.security.public-paths)
+│   │   ├── GatewaySecurityProperties.java # Propiedades JWT (yanki.security.jwt.*)
+│   │   └── JwtTokenValidator.java         # Valida firma HS256, issuer, exp, blacklist
 │   ├── filter
-│   │   ├── GatewayErrorHandler.java       # Manejo de errores de gateway
-│   │   └── JwtAuthenticationGlobalFilter.java # Filtro global de autenticación
+│   │   ├── GatewayErrorHandler.java       # ErrorWebExceptionHandler unificado (@Order -2)
+│   │   └── JwtAuthenticationGlobalFilter.java # GlobalFilter: auth JWT + propagación headers
 │   └── support
-│       └── ErrorResponseWriter.java       # Escribe respuestas 401
+│       └── ErrorResponseWriter.java       # Serializa ApiError a JSON (compartido)
 └── interfaces
     └── rest
-        ├── FallbackController.java        # Endpoints de fallback
+        ├── FallbackController.java        # /fallback/** → 503 SERVICE_UNAVAILABLE
         └── dto
-            └── ApiError.java              # DTO de error unificado
+            └── ApiError.java              # Record: error unificado (timestamp, status, error, code, message, path, details)
+```
+
+## 10. Manejo de Errores Unificado
+
+La gateway centraliza el manejo de errores en dos componentes:
+
+| Componente | Rol |
+|---|---|
+| `GatewayErrorHandler` | `ErrorWebExceptionHandler` (@Order -2): intercepta excepciones que escapan de la cadena de filtros y las traduce a `ApiError` JSON |
+| `ErrorResponseWriter` | Serializa `ApiError` a JSON y escribe la respuesta HTTP (compartido por filter y errorHandler) |
+| `FallbackController` | Endpoint `/fallback/**`: responde 503 cuando el circuit breaker abre |
+
+### Códigos de Error
+
+| Escenario | Status | Code | Componente |
+|---|---|---|---|
+| Token ausente o mal formado | 401 | `MISSING_TOKEN` | `JwtAuthenticationGlobalFilter` |
+| Token inválido, expirado o revocado | 401 | `INVALID_TOKEN` | `JwtAuthenticationGlobalFilter` |
+| Servicio no disponible (Eureka, conexión) | 503 | `SERVICE_UNAVAILABLE` | `GatewayErrorHandler` / `FallbackController` |
+| Timeout del destino (10s) | 504 | `GATEWAY_TIMEOUT` | `GatewayErrorHandler` |
+| Circuit breaker abierto | 503 | `SERVICE_UNAVAILABLE` | `GatewayErrorHandler` |
+| Error interno no controlado | 500 | `INTERNAL_ERROR` | `GatewayErrorHandler` |
+| Método HTTP no permitido | 405 | `METHOD_NOT_ALLOWED` | `GatewayErrorHandler` |
+| Recurso no encontrado | 404 | `NOT_FOUND` | `GatewayErrorHandler` |
+
+### Formato de Error (`ApiError`)
+
+```json
+{
+  "timestamp": "2026-11-22T13:00:00Z",
+  "status": 401,
+  "error": "Unauthorized",
+  "code": "INVALID_TOKEN",
+  "message": "El token JWT es invalido, ha expirado, no cumple la politica de seguridad o ha sido revocado",
+  "path": "/api/accounts/123",
+  "details": ["InvalidTokenException: Firma o claims invalidos: ..."]
+}
 ```
 
 ---
 
-## 10. Casos de Uso
+## 11. Casos de Uso
 
 ### CU-01: Petición autenticada exitosa
 
 1. Cliente envía petición con `Authorization: Bearer <token>`
-2. Gateway verifica firma HS256, issuer y expiración
-3. Gateway consulta Redis: token **no** está en blacklist
-4. Gateway agrega headers `X-User-Id`, `X-Username`, `X-Roles`
-5. Gateway enruta al microservicio destino
+2. `JwtAuthenticationGlobalFilter` verifica firma HS256, issuer, expiración y vida máxima
+3. `TokenBlacklistService` consulta Redis: token **no** está en blacklist
+4. Filter agrega headers `X-User-Id`, `X-Username`, `X-Customer-Id`, `X-Roles`
+5. Gateway enruta al microservicio destino vía `lb://`
 6. Microservicio responde → Gateway reenvía la respuesta al cliente
 
 ### CU-02: Petición sin token
 
 1. Cliente envía petición sin header `Authorization`
-2. Gateway responde `401 MISSING_TOKEN`
+2. `JwtAuthenticationGlobalFilter` responde `401 MISSING_TOKEN`
 3. La petición **no** llega al microservicio destino
 
 ### CU-03: Token inválido o expirado
 
 1. Cliente envía petición con token mal firmado o expirado
-2. Gateway responde `401 INVALID_TOKEN`
-3. La petición **no** llega al microservicio destino
+2. `JwtTokenValidator` detecta firma/issuer/expiración inválida
+3. `JwtAuthenticationGlobalFilter` responde `401 INVALID_TOKEN`
+4. La petición **no** llega al microservicio destino
 
 ### CU-04: Token revocado por logout
 
-1. Cliente hizo logout previamente (token en blacklist de Redis)
+1. Cliente hizo logout previamente (auth-service guardó token en Redis)
 2. Cliente envía petición con el mismo token
-3. Gateway valida firma correctamente
-4. Gateway consulta Redis: token **sí** está en blacklist
-5. Gateway responde `401 INVALID_TOKEN` (token revocado)
+3. `JwtTokenValidator` valida firma correctamente
+4. `TokenBlacklistService` consulta Redis: token **sí** está en blacklist (`yanki:auth:blacklist:<token>`)
+5. `JwtAuthenticationGlobalFilter` responde `401 INVALID_TOKEN` (token revocado)
 
 ### CU-05: Servicio destino caído
 
-1. Cliente envía petición válida
+1. Cliente envía petición válida con token correcto
 2. Gateway intenta contactar al microservicio destino
-3. Servicio no responde en 10 segundos (timeout)
-4. Circuit breaker registra el fallo
-5. Gateway responde con fallback: `503 Service Unavailable`
+3. Servicio no responde en 10 segundos (TimeLimiter timeout)
+4. Resilience4j registra el fallo; si supera 30% de fallos, abre el circuit breaker
+5. `FallbackController` responde `503 SERVICE_UNAVAILABLE` con `ApiError`
+
+### CU-06: Redis caído (fail-open)
+
+1. Cliente envía petición con token válido
+2. `TokenBlacklistService` intenta consultar Redis
+3. Redis no responde → se asume que el token **no** está revocado
+4. La petición continúa y se enruta al microservicio destino
+5. **Nota:** Es preferible permitir un token revocado que bloquear a todos los usuarios válidos
 
 ---
 
-## 11. Referencias
+## 12. Referencias
 
 - `Proyecto General vf.md` — Parte II § API Gateway, JWT, Circuit Breaker
 - `README.md` (raíz) — Arquitectura general de la plataforma
