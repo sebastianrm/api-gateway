@@ -475,6 +475,6 @@ La gateway centraliza el manejo de errores en dos componentes:
 - `AGENTS.md` (raíz) — Reglas de oro de trazabilidad y arquitectura hexagonal
 - `auth-service/README.md` — Servicio de autenticación y emisión de tokens
 - `config-repo/application.yml` — Configuración centralizada
-- `CASOS_USO/` — Casos de uso relacionados con autenticación y autorización
+- `../docs/CASOS_USO` — Casos de uso relacionados con autenticación y autorización
 - `system-prompt-auditoria-hexagonal-yanki.md` — Guía de auditoría hexagonal
 - `api/api-gateway.yaml` — Contrato OpenAPI 3.0 completo con schemas, endpoints y errores
