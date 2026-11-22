@@ -477,3 +477,4 @@ La gateway centraliza el manejo de errores en dos componentes:
 - `config-repo/application.yml` — Configuración centralizada
 - `CASOS_USO/` — Casos de uso relacionados con autenticación y autorización
 - `system-prompt-auditoria-hexagonal-yanki.md` — Guía de auditoría hexagonal
+- `api/api-gateway.yaml` — Contrato OpenAPI 3.0 completo con schemas, endpoints y errores

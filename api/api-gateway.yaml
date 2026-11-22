@@ -1,0 +1,327 @@
+openapi: 3.0.3
+info:
+  title: Yanki API Gateway
+  description: |
+    API Gateway de la plataforma bancaria Yanki.
+    
+    Puerta de entrada única para todos los microservicios. Maneja enrutamiento,
+    validación JWT, circuit breaker, CORS y respuestas de fallback.
+    
+    **Características principales:**
+    - Enrutamiento a microservicios backend
+    - Validación de tokens JWT
+    - Circuit breaker con fallback responses
+    - CORS configuration
+    - Rate limiting
+    - Health check del gateway
+  version: 1.0.0
+  contact:
+    name: Sebastian Retamal Morales
+    email: retamal.sebastian@gmail.com
+  license:
+    name: Proprietary
+    url: https://yanki.com/license
+
+servers:
+  - url: http://localhost:8080
+    description: Entorno local de desarrollo
+  - url: https://api-gateway.yanki.com
+    description: Entorno de producción
+
+tags:
+  - name: Fallback
+    description: Respuesta de respaldo de la API Gateway
+  - name: Gateway
+    description: Endpoints del API Gateway
+
+paths:
+  /fallback/health:
+    get:
+      tags: [Gateway]
+      summary: Consulta el estado del gateway
+      description: Retorna el estado básico de la API Gateway. Endpoint público sin autenticación.
+      operationId: gatewayHealth
+      responses:
+        '200':
+          description: Estado del gateway
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GatewayHealthResponse'
+              example:
+                status: "UP"
+                service: "api-gateway"
+                timestamp: "2024-01-15T10:30:00Z"
+      security: []
+
+  /fallback/**:
+    get:
+      tags: [Fallback]
+      summary: Responde 503 cuando el microservicio destino no está disponible
+      description: |
+        Endpoint de respaldo (fallback) activado por el circuit breaker cuando un microservicio
+        backend no está disponible. Responde 503 con el cuerpo JSON estándar ApiError.
+        
+        **Nota:** Este endpoint es público y no requiere token JWT.
+      operationId: fallback
+      responses:
+        '503':
+          description: El servicio destino no está disponible en este momento
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                timestamp: "2024-01-15T10:30:00Z"
+                status: 503
+                error: "Service Unavailable"
+                code: "SERVICE_UNAVAILABLE"
+                message: "El servicio destino no está disponible en este momento, intételo nuevamente"
+                path: "/api/accounts"
+                details: null
+      security: []
+
+  /api/auth/**:
+    get:
+      tags: [Gateway]
+      summary: Rutas de autenticación (proxy a auth-service)
+      description: |
+        Todas las rutas /api/auth/* se enrutan al auth-service (puerto 8081).
+        Los endpoints de login y refresh son públicos; validate y logout requieren JWT.
+      operationId: authProxy
+      responses:
+        '200':
+          description: Solicitud enrutada exitosamente al auth-service
+        '401':
+          description: Token JWT inválido o expirado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '503':
+          description: auth-service no disponible
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /api/customers/**:
+    get:
+      tags: [Gateway]
+      summary: Rutas de clientes (proxy a customers-service)
+      description: Todas las rutas /api/customers/* se enrutan al customers-service (puerto 8082)
+      operationId: customersProxy
+      responses:
+        '200':
+          description: Solicitud enrutada exitosamente al customers-service
+        '401':
+          description: Token JWT inválido o expirado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '503':
+          description: customers-service no disponible
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /api/accounts/**:
+    get:
+      tags: [Gateway]
+      summary: Rutas de cuentas (proxy a accounts-service)
+      description: Todas las rutas /api/accounts/* se enrutan al accounts-service (puerto 8083)
+      operationId: accountsProxy
+      responses:
+        '200':
+          description: Solicitud enrutada exitosamente al accounts-service
+        '401':
+          description: Token JWT inválido o expirado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '503':
+          description: accounts-service no disponible
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /api/credits/**:
+    get:
+      tags: [Gateway]
+      summary: Rutas de créditos (proxy a credits-service)
+      description: Todas las rutas /api/credits/* se enrutan al credits-service (puerto 8084)
+      operationId: creditsProxy
+      responses:
+        '200':
+          description: Solicitud enrutada exitosamente al credits-service
+        '401':
+          description: Token JWT inválido o expirado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '503':
+          description: credits-service no disponible
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /api/cards/**:
+    get:
+      tags: [Gateway]
+      summary: Rutas de tarjetas (proxy a cards-service)
+      description: Todas las rutas /api/cards/* se enrutan al cards-service (puerto 8085)
+      operationId: cardsProxy
+      responses:
+        '200':
+          description: Solicitud enrutada exitosamente al cards-service
+        '401':
+          description: Token JWT inválido o expirado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '503':
+          description: cards-service no disponible
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /api/transfers/**:
+    get:
+      tags: [Gateway]
+      summary: Rutas de transferencias (proxy a transfers-service)
+      description: Todas las rutas /api/transfers/* se enrutan al transfers-service (puerto 8086)
+      operationId: transfersProxy
+      responses:
+        '200':
+          description: Solicitud enrutada exitosamente al transfers-service
+        '401':
+          description: Token JWT inválido o expirado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '503':
+          description: transfers-service no disponible
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /api/wallets/**:
+    get:
+      tags: [Gateway]
+      summary: Rutas de wallets (proxy a wallet-service)
+      description: Todas las rutas /api/wallets/* se enrutan al wallet-service (puerto 8087)
+      operationId: walletsProxy
+      responses:
+        '200':
+          description: Solicitud enrutada exitosamente al wallet-service
+        '401':
+          description: Token JWT inválido o expirado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '503':
+          description: wallet-service no disponible
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /api/reports/**:
+    get:
+      tags: [Gateway]
+      summary: Rutas de reportes (proxy a reports-service)
+      description: Todas las rutas /api/reports/* se enrutan al reports-service (puerto 8088)
+      operationId: reportsProxy
+      responses:
+        '200':
+          description: Solicitud enrutada exitosamente al reports-service
+        '401':
+          description: Token JWT inválido o expirado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '503':
+          description: reports-service no disponible
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+components:
+  schemas:
+    GatewayHealthResponse:
+      type: object
+      description: Respuesta de health check del API Gateway
+      properties:
+        status:
+          type: string
+          description: Estado del gateway
+          enum: [UP, DOWN]
+          example: "UP"
+        service:
+          type: string
+          description: Nombre del servicio
+          example: "api-gateway"
+        timestamp:
+          type: string
+          format: date-time
+          description: Timestamp del health check (ISO 8601)
+          example: "2024-01-15T10:30:00Z"
+
+    ApiError:
+      type: object
+      description: Cuerpo estándar de error de la API Yanki
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+          description: Momento exacto en que se generó el error (ISO 8601)
+          example: "2024-01-15T10:30:00Z"
+        status:
+          type: integer
+          format: int32
+          description: Código de estado HTTP
+          example: 503
+        error:
+          type: string
+          description: Descripción textual del error HTTP
+          example: "Service Unavailable"
+        code:
+          type: string
+          description: Código de negocio específico del error
+          example: "SERVICE_UNAVAILABLE"
+        message:
+          type: string
+          description: Descripción legible del error en español
+          example: "El servicio destino no está disponible en este momento, intételo nuevamente"
+        path:
+          type: string
+          description: Ruta de la API que originó el error
+          example: "/api/accounts"
+        details:
+          type: object
+          description: Detalle adicional del error
+          additionalProperties: true
+          nullable: true
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token JWT obtenido mediante el endpoint /api/auth/login del auth-service
+
+security:
+  - BearerAuth: []
