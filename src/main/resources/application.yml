@@ -162,7 +162,7 @@ resilience4j:
 yanki:
   security:
     jwt:
-      secret: ${JWT_SECRET:yanki-platform-dev-secret-key-change-me-2026}
+      secret: ${JWT_SECRET:}
       issuer: ${JWT_ISSUER:yanki-platform}
       expiration: ${JWT_EXPIRATION:1h}
       max-lifetime-grace: ${JWT_MAX_LIFETIME_GRACE:5m}
