@@ -50,32 +50,28 @@ public class TokenBlacklistService {
         }
 
         String key = BLACKLIST_KEY_PREFIX + token;
-        log.info("[BLACKLIST] Consultando lista negra en Redis para la clave: {}...", key.substring(0, Math.min(40, key.length())));
+        log.debug("[BLACKLIST] Consultando lista negra en Redis");
 
         return redisTemplate.hasKey(key)
-                .doOnSubscribe(s -> log.info("[BLACKLIST] Suscripcion a hasKey() establecida para: {}...", key.substring(0, Math.min(40, key.length()))))
-                .doOnNext(exists -> log.info("[BLACKLIST] hasKey() retorno valor: {} para clave: {}...", exists, key.substring(0, Math.min(40, key.length()))))
-                .doOnError(err -> log.error("[BLACKLIST] Error en hasKey() para clave: {} — Error: {}", key.substring(0, Math.min(40, key.length())), err.getMessage()))
+                .doOnNext(exists -> log.debug("[BLACKLIST] Redis hasKey() retorno: {}", exists))
+                .doOnError(err -> log.error("[BLACKLIST] Error al consultar Redis: {}", err.getMessage(), err))
                 .map(exists -> {
                     boolean isBlacklisted = Boolean.TRUE.equals(exists);
                     if (isBlacklisted) {
-                        log.info("[BLACKLIST] Token encontrado en la lista negra - el token ha sido revocado");
+                        log.warn("[BLACKLIST] Token encontrado en la lista negra — token revocado");
                     } else {
-                        log.info("[BLACKLIST] Token NO encontrado en la lista negra — token valido para continuar");
+                        log.debug("[BLACKLIST] Token no encontrado en la lista negra — token valido");
                     }
                     return isBlacklisted;
                 })
-                .doOnNext(result -> log.info("[BLACKLIST] Despues de map() — resultado final: {}", result))
                 .defaultIfEmpty(false)
-                .doOnNext(afterDefault -> log.info("[BLACKLIST] Despues de defaultIfEmpty() — valor emitido: {}", afterDefault))
                 .onErrorResume(error -> {
                     log.warn("[BLACKLIST] Error al consultar la lista negra en Redis: {}. "
                             + "Se asume que el token NO esta revocado (fail-open).",
                             error.getMessage());
-                    // Fail-open: si Redis falla, no bloqueamos el acceso
                     return Mono.just(false);
                 })
-                .doOnTerminate(() -> log.info("[BLACKLIST] Flujo isBlacklisted() terminado para: {}...", key.substring(0, Math.min(40, key.length()))))
-                .doFinally(signalType -> log.info("[BLACKLIST] Flujo isBlacklisted() finalizado con senal: {} para: {}...", signalType, key.substring(0, Math.min(40, key.length()))));
+                .doOnTerminate(() -> log.debug("[BLACKLIST] Consulta de lista negra completada"))
+                .doFinally(signalType -> log.debug("[BLACKLIST] Flujo isBlacklisted() finalizado con senal: {}", signalType));
     }
 }

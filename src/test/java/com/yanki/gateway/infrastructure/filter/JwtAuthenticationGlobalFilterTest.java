@@ -99,10 +99,10 @@ class JwtAuthenticationGlobalFilterTest {
     }
 
     @Test
-    @DisplayName("Inyecta X-User-Id, X-Username y X-Roles cuando el token es valido")
+    @DisplayName("Inyecta X-User-Id, X-Username, X-Customer-Id y X-Roles cuando el token es valido")
     void shouldPropagateIdentityHeadersWhenTokenIsValid() {
         when(tokenValidator.validateReactive("token-valido")).thenReturn(Mono.just(
-                new JwtPrincipal("user-123", "juan.perez", List.of("ROLE_ADMIN", "ROLE_USER"))));
+                new JwtPrincipal("user-123", "juan.perez", "CUST-001", List.of("ROLE_ADMIN", "ROLE_USER"))));
         MockServerWebExchange exchange = MockServerWebExchange.from(
                 MockServerHttpRequest.get("/api/accounts/123")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer token-valido")
@@ -115,6 +115,7 @@ class JwtAuthenticationGlobalFilterTest {
         HttpHeaders headers = captor.getValue().getRequest().getHeaders();
         assertThat(headers.getFirst(JwtAuthenticationGlobalFilter.USER_ID_HEADER)).isEqualTo("user-123");
         assertThat(headers.getFirst(JwtAuthenticationGlobalFilter.USERNAME_HEADER)).isEqualTo("juan.perez");
+        assertThat(headers.getFirst(JwtAuthenticationGlobalFilter.CUSTOMER_ID_HEADER)).isEqualTo("CUST-001");
         assertThat(headers.getFirst(JwtAuthenticationGlobalFilter.ROLES_HEADER)).isEqualTo("ROLE_ADMIN,ROLE_USER");
     }
 

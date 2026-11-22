@@ -61,6 +61,12 @@ public class JwtAuthenticationGlobalFilter implements GlobalFilter, Ordered {
     public static final String ROLES_HEADER = "X-Roles";
 
     /**
+     * Cabecera propagada al destino con el ID del cliente autenticado.
+     * Se utiliza para que los microservicios downstream validen la propiedad de recursos.
+     */
+    public static final String CUSTOMER_ID_HEADER = "X-Customer-Id";
+
+    /**
      * Codigo de error devuelto cuando falta la cabecera Authorization.
      */
     public static final String MISSING_TOKEN_CODE = "MISSING_TOKEN";
@@ -96,17 +102,17 @@ public class JwtAuthenticationGlobalFilter implements GlobalFilter, Ordered {
                     "Falta la cabecera Authorization con el token Bearer en las rutas protegidas");
         }
 
-        log.info("[FILTER] Validando token JWT de forma reactiva con verificacion de lista negra para: {}", path);
+        log.debug("[FILTER] Validando token JWT para: {}", path);
 
         return tokenValidator.validateReactive(token)
-                .doOnNext(principal -> log.info("[FILTER] validateReactive() emitió principal para: {}", principal.username()))
+                .doOnNext(principal -> log.debug("[FILTER] Token validado para: {}", principal.username()))
                 .flatMap(principal -> {
-                    log.info("[FILTER] Token valido — propagando peticion para: {}", principal.username());
+                    log.debug("[FILTER] Propagando peticion autenticada para: {}", principal.username());
                     return chain.filter(withPrincipal(exchange, principal));
                 })
-                .doOnSuccess(v -> log.info("[FILTER] chain.filter() completado exitosamente"))
-                .doOnTerminate(() -> log.info("[FILTER] Flujo validateFlow terminado"))
-                .doFinally(signal -> log.info("[FILTER] Flujo validateFlow finalizado con senal: {}", signal))
+                .doOnSuccess(v -> log.debug("[FILTER] Peticion completada exitosamente"))
+                .doOnTerminate(() -> log.debug("[FILTER] Flujo de validacion terminado"))
+                .doFinally(signal -> log.debug("[FILTER] Flujo de validacion finalizado con senal: {}", signal))
                 .onErrorResume(com.yanki.gateway.infrastructure.config.JwtTokenValidator.InvalidTokenException.class, ex -> {
                     log.warn("[FILTER] Token JWT no valido o revocado, rechazando peticion a: {} — razon: {}",
                             exchange.getRequest().getPath().value(), ex.getMessage());
@@ -115,11 +121,17 @@ public class JwtAuthenticationGlobalFilter implements GlobalFilter, Ordered {
                 });
     }
 
+    /**
+     * Orden de ejecucion del filtro de autenticacion JWT.
+     *
+     * <p>Se ejecuta despues de NettyWriteResponseFilter (-1) para que la respuesta de error
+     * sea completada por la cadena, y antes que los filtros de ruta y de routing.</p>
+     */
+    private static final int FILTER_ORDER = 0;
+
     @Override
     public int getOrder() {
-        // Se ejecuta despues de NettyWriteResponseFilter (-1) para que la respuesta de error
-        // sea completada por la cadena, y antes que los filtros de ruta y de routing.
-        return 0;
+        return FILTER_ORDER;
     }
 
     /**
@@ -160,9 +172,11 @@ public class JwtAuthenticationGlobalFilter implements GlobalFilter, Ordered {
                     headers.remove(USER_ID_HEADER);
                     headers.remove(USERNAME_HEADER);
                     headers.remove(ROLES_HEADER);
+                    headers.remove(CUSTOMER_ID_HEADER);
                     headers.set(USER_ID_HEADER, principal.userId());
                     headers.set(USERNAME_HEADER, principal.username());
                     headers.set(ROLES_HEADER, principal.rolesAsHeaderValue());
+                    headers.set(CUSTOMER_ID_HEADER, principal.customerId());
                 })
                 .build();
         return exchange.mutate().request(request).build();

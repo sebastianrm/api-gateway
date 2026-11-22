@@ -54,6 +54,16 @@ public class GatewayErrorHandler implements ErrorWebExceptionHandler {
      */
     public static final String INTERNAL_ERROR_CODE = "INTERNAL_ERROR";
 
+    /**
+     * Codigo de error devuelto cuando el metodo HTTP no esta permitido.
+     */
+    public static final String METHOD_NOT_ALLOWED_CODE = "METHOD_NOT_ALLOWED";
+
+    /**
+     * Codigo de error devuelto cuando el recurso no se encuentra.
+     */
+    public static final String NOT_FOUND_CODE = "NOT_FOUND";
+
     private final ErrorResponseWriter errorResponseWriter;
 
     @Override
@@ -106,6 +116,12 @@ public class GatewayErrorHandler implements ErrorWebExceptionHandler {
         }
         if (status == HttpStatus.INTERNAL_SERVER_ERROR) {
             return INTERNAL_ERROR_CODE;
+        }
+        if (status == HttpStatus.METHOD_NOT_ALLOWED) {
+            return METHOD_NOT_ALLOWED_CODE;
+        }
+        if (status == HttpStatus.NOT_FOUND) {
+            return NOT_FOUND_CODE;
         }
         return ex.getClass().getSimpleName().toUpperCase(Locale.ROOT);
     }

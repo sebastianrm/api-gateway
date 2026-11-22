@@ -59,6 +59,7 @@ public class JwtTokenValidator {
     private static final String USERNAME_CLAIM = "username";
     private static final String PREFERRED_USERNAME_CLAIM = "preferred_username";
     private static final String USER_ID_CLAIM = "userId";
+    private static final String CUSTOMER_ID_CLAIM = "customerId";
 
     private final GatewaySecurityProperties properties;
     private final SecretKey signingKey;
@@ -137,7 +138,7 @@ public class JwtTokenValidator {
      * @throws InvalidTokenException si el token es invalido, expirado o revocado
      */
     public Mono<JwtPrincipal> validateReactive(String token) {
-        log.info("[VALIDATOR] Iniciando validacion reactiva del token JWT");
+        log.debug("[VALIDATOR] Iniciando validacion reactiva del token JWT");
 
         if (!StringUtils.hasText(token)) {
             log.warn("[VALIDATOR] Token vacio recibido en validacion reactiva");
@@ -146,14 +147,14 @@ public class JwtTokenValidator {
 
         Claims claims;
         try {
-            log.info("[VALIDATOR] Verificando firma y claims del token JWT");
+            log.debug("[VALIDATOR] Verificando firma y claims del token JWT");
             claims = Jwts.parser()
                     .verifyWith(signingKey)
                     .requireIssuer(properties.getIssuer())
                     .build()
                     .parseSignedClaims(token)
                     .getPayload();
-            log.info("[VALIDATOR] Firma y claims del token JWT validados correctamente");
+            log.debug("[VALIDATOR] Firma y claims del token JWT validados correctamente");
         } catch (JwtException | IllegalArgumentException ex) {
             log.warn("[VALIDATOR] Token JWT rechazado por firma o claims invalidos: {}", ex.getMessage());
             return Mono.error(new InvalidTokenException("Firma o claims invalidos: " + ex.getMessage()));
@@ -166,24 +167,22 @@ public class JwtTokenValidator {
         }
 
         // Verificar si el token esta en la lista negra (flujo reactivo puro)
-        log.info("[VALIDATOR] Verificando lista negra de tokens para el usuario: {}",
-                principal.get().username());
+        log.debug("[VALIDATOR] Verificando lista negra de tokens");
 
         return tokenBlacklistService.isBlacklisted(token)
-                .doOnNext(isBl -> log.info("[VALIDATOR] Valor recibido de isBlacklisted: {}", isBl))
+                .doOnNext(isBl -> log.debug("[VALIDATOR] Valor recibido de isBlacklisted: {}", isBl))
                 .defaultIfEmpty(false)
                 .flatMap(isBlacklisted -> {
-                    log.info("[VALIDATOR] Dentro del flatMap — isBlacklisted: {}", isBlacklisted);
+                    log.debug("[VALIDATOR] Procesando resultado de lista negra: {}", isBlacklisted);
                     if (Boolean.TRUE.equals(isBlacklisted)) {
-                        log.info("[VALIDATOR] Token JWT rechazado: el token esta en la lista negra (revocado por logout)");
+                        log.warn("[VALIDATOR] Token JWT rechazado: el token esta en la lista negra (revocado por logout)");
                         return Mono.error(new InvalidTokenException("Token revocado (en lista negra)"));
                     }
-                    log.info("[VALIDATOR] Token JWT validado exitosamente para el usuario: {}",
-                            principal.get().username());
+                    log.debug("[VALIDATOR] Token JWT validado exitosamente");
                     return Mono.just(principal.get());
                 })
-                .doOnNext(p -> log.info("[VALIDATOR] Principal emitido correctamente para: {}", p.username()))
-                .doOnSuccess(p -> log.info("[VALIDATOR] Flujo validateReactive() completado exitosamente para: {}", p.username()));
+                .doOnNext(p -> log.debug("[VALIDATOR] Principal emitido correctamente"))
+                .doOnSuccess(p -> log.debug("[VALIDATOR] Flujo validateReactive() completado exitosamente"));
     }
 
     /**
@@ -203,7 +202,8 @@ public class JwtTokenValidator {
         }
         String userId = resolveUserId(claims);
         String username = resolveUsername(claims, userId);
-        return Optional.of(new JwtPrincipal(userId, username, resolveRoles(claims)));
+        String customerId = resolveCustomerId(claims);
+        return Optional.of(new JwtPrincipal(userId, username, customerId, resolveRoles(claims)));
     }
 
     /**
@@ -259,6 +259,17 @@ public class JwtTokenValidator {
             return String.valueOf(preferredUsername);
         }
         return userId;
+    }
+
+    /**
+     * Resuelve el identificador del cliente autenticado.
+     *
+     * @param claims claims del token verificado
+     * @return identificador del cliente
+     */
+    private String resolveCustomerId(Claims claims) {
+        Object customerId = claims.get(CUSTOMER_ID_CLAIM);
+        return customerId == null ? "" : String.valueOf(customerId);
     }
 
     /**

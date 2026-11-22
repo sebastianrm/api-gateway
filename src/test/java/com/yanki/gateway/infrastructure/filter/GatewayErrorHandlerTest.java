@@ -151,4 +151,61 @@ class GatewayErrorHandlerTest {
                 .contains("\"message\":\"Fallo superior\"")
                 .contains("IllegalStateException: Causa raiz");
     }
+
+    @Test
+    @DisplayName("Responde 405 METHOD_NOT_ALLOWED cuando se invoca un metodo HTTP no permitido")
+    void shouldReturnMethodNotAllowedFor405ResponseStatusException() {
+        MockServerWebExchange exchange = MockServerWebExchange.from(MockServerHttpRequest.post("/api/accounts/123"));
+
+        StepVerifier.create(errorHandler.handle(exchange,
+                new ResponseStatusException(HttpStatus.METHOD_NOT_ALLOWED, "Method Not Allowed")))
+                .verifyComplete();
+
+        String body = exchange.getResponse().getBodyAsString().block();
+        assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.METHOD_NOT_ALLOWED);
+        assertThat(body)
+                .contains("\"status\":405")
+                .contains("\"error\":\"Method Not Allowed\"")
+                .contains("\"code\":\"METHOD_NOT_ALLOWED\"")
+                .contains("\"message\":\"405 METHOD_NOT_ALLOWED \\\"Method Not Allowed\\\"\"");
+    }
+
+    @Test
+    @DisplayName("Responde 404 NOT_FOUND cuando ResponseStatusException indica recurso no encontrado")
+    void shouldReturnNotFoundFor404ResponseStatusException() {
+        MockServerWebExchange exchange = MockServerWebExchange.from(
+                MockServerHttpRequest.get("/api/reports/customer-360/123"));
+
+        StepVerifier.create(errorHandler.handle(exchange,
+                new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "No static resource api/reports/customer-360.")))
+                .verifyComplete();
+
+        String body = exchange.getResponse().getBodyAsString().block();
+        assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(body)
+                .contains("\"status\":404")
+                .contains("\"error\":\"Not Found\"")
+                .contains("\"code\":\"NOT_FOUND\"")
+                .contains("\"message\":\"404 NOT_FOUND \\\"No static resource api/reports/customer-360.\\\"\"");
+    }
+
+    @Test
+    @DisplayName("Responde 404 NOT_FOUND cuando NoResourceFoundException de WebFlux indica recurso no encontrado")
+    void shouldReturnNotFoundForWebFluxNoResourceFoundException() {
+        MockServerWebExchange exchange = MockServerWebExchange.from(
+                MockServerHttpRequest.get("/api/reports/customer-360/123"));
+
+        StepVerifier.create(errorHandler.handle(exchange,
+                new org.springframework.web.reactive.resource.NoResourceFoundException(
+                        "No static resource api/reports/customer-360.")))
+                .verifyComplete();
+
+        String body = exchange.getResponse().getBodyAsString().block();
+        assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(body)
+                .contains("\"status\":404")
+                .contains("\"error\":\"Not Found\"")
+                .contains("\"code\":\"NOT_FOUND\"");
+    }
 }

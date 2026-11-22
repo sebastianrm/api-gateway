@@ -37,7 +37,9 @@ public class GatewayCorsProperties {
     /**
      * Cabeceras de peticion permitidas.
      */
-    private List<String> allowedHeaders = new ArrayList<>(List.of("*"));
+    private List<String> allowedHeaders = new ArrayList<>(List.of(
+            "Authorization", "Content-Type", "Accept", "X-Request-ID", "X-Correlation-ID"
+    ));
 
     /**
      * Cabeceras de respuesta expuestas al navegador.
